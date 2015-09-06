@@ -21,23 +21,58 @@ var digits = map[cell]string{
 }
 
 var (
+	IllegibleDigit       = errors.New("Illegible digit")
+	InvalidChecksum      = errors.New("Invalid checksum in account number")
 	InvalidAccountNumber = errors.New("Invalid account number")
+	InvalidStrokes       = errors.New("Invalid characters in cell")
 	UnknownDigit         = errors.New("The cell doesn't match a known digit")
 )
 
 // Cell represents one "digit" in the banks format.
 type cell [3]string
 
+// digit represents one number in an account number.
+type digit struct {
+	Cell  cell
+	Error error
+}
+
 // accountNum represents a 9 "digit" account number.
-type accountNum [9]cell
+type accountNum [9]digit
+
+// digits returns the digits as a slice of strings.
+func (a accountNum) digits() []string {
+	var text []string
+	for _, digit := range a {
+		text = append(text, digits[digit.Cell])
+	}
+	return text
+}
+
+// Checksum validates the checksum and returns Inval
+func (a accountNum) Checksum() error {
+	darr := a.digits()
+	var (
+		sum = 0
+		mul = 1
+	)
+	for i := len(darr) - 1; i >= 0; i-- {
+		d, err := strconv.Atoi(darr[i])
+		if err != nil {
+			return UnknownDigit
+		}
+		sum = sum + d*mul
+		mul++
+	}
+	if sum%11 == 0 {
+		return nil
+	}
+	return InvalidChecksum
+}
 
 // String returns the account number as a string.
 func (a accountNum) String() string {
-	var text []string
-	for _, cell := range a {
-		text = append(text, digits[cell])
-	}
-	return strings.Join(text, "")
+	return strings.Join(a.digits(), "")
 }
 
 // Numeric returns the account number as an int32.
@@ -56,7 +91,7 @@ func ParseAccountNumber(l []string) (accountNum, error) {
 	a := accountNum{}
 	for cellIndex, line := range l {
 		for offset := 0; offset < 27; {
-			a[offset/3][cellIndex] = line[offset : offset+3]
+			a[offset/3].Cell[cellIndex] = line[offset : offset+3]
 			offset = offset + 3
 		}
 	}
